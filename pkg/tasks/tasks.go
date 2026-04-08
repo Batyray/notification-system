@@ -15,10 +15,11 @@ const (
 )
 
 type NotificationPayload struct {
-	NotificationID uuid.UUID `json:"notification_id"`
-	Channel        string    `json:"channel"`
-	Priority       string    `json:"priority"`
-	CorrelationID  string    `json:"correlation_id"`
+	NotificationID uuid.UUID         `json:"notification_id"`
+	Channel        string            `json:"channel"`
+	Priority       string            `json:"priority"`
+	CorrelationID  string            `json:"correlation_id"`
+	TraceCarrier   map[string]string `json:"trace_carrier,omitempty"`
 }
 
 func NewNotificationTask(payload NotificationPayload) (*asynq.Task, error) {
