@@ -104,15 +104,16 @@ func (h *Handler) HandleNotification(ctx context.Context, task *asynq.Task) erro
 		content = rendered
 	}
 
-	_, deliverySpan := tracer.Start(ctx, "webhook.deliver",
+	deliveryCtx, deliverySpan := tracer.Start(ctx, "webhook.deliver",
 		trace.WithAttributes(
 			attribute.String("notification.id", payload.NotificationID.String()),
 			attribute.String("notification.channel", string(notification.Channel)),
 			attribute.String("notification.recipient", notification.Recipient),
 		),
 	)
+	defer deliverySpan.End()
 
-	resp, err := h.DeliveryClient.Send(ctx, delivery.SendRequest{
+	resp, err := h.DeliveryClient.Send(deliveryCtx, delivery.SendRequest{
 		To:            notification.Recipient,
 		Channel:       string(notification.Channel),
 		Content:       content,
@@ -126,11 +127,10 @@ func (h *Handler) HandleNotification(ctx context.Context, task *asynq.Task) erro
 		if errors.As(err, &sendErr) {
 			deliverySpan.SetAttributes(attribute.Int("http.status_code", sendErr.StatusCode))
 		}
-		deliverySpan.End()
 	} else {
+		// Client.Send only succeeds on 202 Accepted
 		deliverySpan.SetAttributes(attribute.Int("http.status_code", 202))
 		deliverySpan.SetStatus(codes.Ok, "")
-		deliverySpan.End()
 	}
 
 	if err != nil {
