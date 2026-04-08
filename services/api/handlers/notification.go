@@ -283,6 +283,25 @@ func decodeCursor(cursor string) (time.Time, uuid.UUID, error) {
 	return time.Unix(0, nanos), id, nil
 }
 
+// validateCreateRequest validates a CreateNotificationRequest and returns an error if invalid.
+func validateCreateRequest(req CreateNotificationRequest) error {
+	if req.Recipient == "" {
+		return fmt.Errorf("recipient is required")
+	}
+	if req.Content == "" {
+		return fmt.Errorf("content is required")
+	}
+	channel := models.Channel(req.Channel)
+	if !channel.IsValid() {
+		return fmt.Errorf("invalid channel: %s", req.Channel)
+	}
+	priority := models.Priority(req.Priority)
+	if !priority.IsValid() {
+		return fmt.Errorf("invalid priority: %s", req.Priority)
+	}
+	return nil
+}
+
 // --- Response helper ---
 
 func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
