@@ -1,4 +1,4 @@
-.PHONY: run stop test migrate-up migrate-down swagger lint
+.PHONY: run stop test test-integration migrate-up migrate-down swagger lint
 
 # Run all services
 run:
@@ -10,12 +10,16 @@ stop:
 
 # Run tests
 test:
-	go test ./... -v -race -count=1
+	GOTOOLCHAIN=auto go test ./... -v -race -count=1
 
 # Run tests with coverage
 test-coverage:
-	go test ./... -v -race -coverprofile=coverage.out
+	GOTOOLCHAIN=auto go test ./... -v -race -coverprofile=coverage.out
 	go tool cover -html=coverage.out -o coverage.html
+
+# Run integration tests (requires docker-compose up)
+test-integration:
+	GOTOOLCHAIN=auto go test -tags=integration ./tests/integration/... -v -count=1
 
 # Run migrations (local dev — assumes postgres on localhost)
 migrate-up:
