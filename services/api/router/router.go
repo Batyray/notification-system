@@ -1,11 +1,13 @@
 package router
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"github.com/batyray/notification-system/pkg/logger"
 	"github.com/batyray/notification-system/services/api/handlers"
 	"github.com/batyray/notification-system/services/api/middleware"
@@ -23,6 +25,9 @@ func New(deps Deps) *chi.Mux {
 
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(chiMiddleware.RealIP)
+	r.Use(func(next http.Handler) http.Handler {
+		return otelhttp.NewHandler(next, "api")
+	})
 	r.Use(middleware.CorrelationID)
 	r.Use(middleware.Logging(deps.Logger))
 
