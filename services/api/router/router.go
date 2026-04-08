@@ -15,9 +15,10 @@ import (
 )
 
 type Deps struct {
-	Handler *handlers.Handler
-	Redis   *redis.Client
-	Logger  *logger.Logger
+	Handler        *handlers.Handler
+	Redis          *redis.Client
+	Logger         *logger.Logger
+	MetricsHandler http.Handler
 }
 
 func New(deps Deps) *chi.Mux {
@@ -25,6 +26,7 @@ func New(deps Deps) *chi.Mux {
 
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(chiMiddleware.RealIP)
+	r.Use(middleware.Metrics("api"))
 	r.Use(func(next http.Handler) http.Handler {
 		return otelhttp.NewHandler(next, "api")
 	})
@@ -33,6 +35,10 @@ func New(deps Deps) *chi.Mux {
 
 	r.Get("/health", deps.Handler.HealthCheck)
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
+
+	if deps.MetricsHandler != nil {
+		r.Get("/metrics", deps.MetricsHandler.ServeHTTP)
+	}
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/notifications", func(r chi.Router) {

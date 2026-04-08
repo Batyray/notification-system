@@ -9,6 +9,7 @@ import (
 	_ "github.com/batyray/notification-system/docs/swagger"
 	"github.com/batyray/notification-system/pkg/config"
 	"github.com/batyray/notification-system/pkg/logger"
+	"github.com/batyray/notification-system/pkg/metrics"
 	"github.com/batyray/notification-system/pkg/tracing"
 	"github.com/batyray/notification-system/services/api/handlers"
 	"github.com/batyray/notification-system/services/api/router"
@@ -45,6 +46,13 @@ func main() {
 		l.Info("tracing initialized")
 	}
 
+	metricsHandler, err := metrics.Init("api")
+	if err != nil {
+		l.Warn("failed to init metrics, continuing without it", "error", err)
+	} else {
+		l.Info("metrics initialized")
+	}
+
 	db, err := gorm.Open(postgres.Open(cfg.Postgres.DSN()), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("failed to connect to postgres: %v", err)
@@ -73,9 +81,10 @@ func main() {
 	}
 
 	r := router.New(router.Deps{
-		Handler: h,
-		Redis:   rdb,
-		Logger:  l,
+		Handler:        h,
+		Redis:          rdb,
+		Logger:         l,
+		MetricsHandler: metricsHandler,
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.API.Port)
