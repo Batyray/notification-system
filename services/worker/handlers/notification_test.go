@@ -266,9 +266,14 @@ func TestHandleNotification_CancelledSkipped(t *testing.T) {
 	assert.False(t, serverCalled.Load(), "delivery server should not have been called for cancelled notification")
 }
 
-func TestHandleNotification_RateLimited(t *testing.T) {
+func TestHandleNotification_RateLimited_WaitsAndProceeds(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("delivery should not be called when rate limited")
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(delivery.SendResponse{
+			MessageID: "msg-rate-limited",
+			Status:    "accepted",
+			Timestamp: "2026-04-08T12:00:00Z",
+		})
 	}))
 	defer server.Close()
 
@@ -286,7 +291,8 @@ func TestHandleNotification_RateLimited(t *testing.T) {
 
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	limiter := ratelimit.New(rdb, 1, 1*time.Second)
+	// Short window so the handler can proceed after waiting
+	limiter := ratelimit.New(rdb, 1, 150*time.Millisecond)
 
 	// Use up the rate limit
 	allowed, err := limiter.Allow(context.Background(), "sms")
@@ -301,14 +307,52 @@ func TestHandleNotification_RateLimited(t *testing.T) {
 	}
 
 	task := createTestTask(t, notificationID, "sms", "normal")
+	// Handler waits for rate limit to clear, then succeeds
 	err = h.HandleNotification(context.Background(), task)
-	assert.Error(t, err)
-	assert.NotErrorIs(t, err, asynq.SkipRetry)
+	require.NoError(t, err)
 
-	var rateLimitErr *ratelimit.RateLimitedError
-	assert.ErrorAs(t, err, &rateLimitErr)
+	var updated models.Notification
+	require.NoError(t, db.First(&updated, "id = ?", notificationID).Error)
+	assert.Equal(t, models.StatusSent, updated.Status)
+}
 
-	// Notification should still be pending (not moved to processing)
+func TestHandleNotification_RateLimited_RespectsContextCancel(t *testing.T) {
+	db := setupTestDB(t)
+	notificationID := uuid.New()
+	notification := models.Notification{
+		ID:        notificationID,
+		Recipient: "+1234567890",
+		Channel:   models.ChannelSMS,
+		Content:   "Hello World",
+		Priority:  models.PriorityNormal,
+		Status:    models.StatusPending,
+	}
+	require.NoError(t, db.Create(&notification).Error)
+
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	limiter := ratelimit.New(rdb, 1, 10*time.Second)
+
+	// Use up the rate limit (long window, won't clear naturally)
+	allowed, err := limiter.Allow(context.Background(), "sms")
+	require.NoError(t, err)
+	require.True(t, allowed)
+
+	h := &Handler{
+		DB:             db,
+		DeliveryClient: delivery.NewClient("http://localhost:0"),
+		Logger:         setupTestLogger(),
+		Limiter:        limiter,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+
+	task := createTestTask(t, notificationID, "sms", "normal")
+	err = h.HandleNotification(ctx, task)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+
+	// Notification should still be pending
 	var updated models.Notification
 	require.NoError(t, db.First(&updated, "id = ?", notificationID).Error)
 	assert.Equal(t, models.StatusPending, updated.Status)

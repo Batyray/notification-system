@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -30,11 +29,7 @@ var retryDelays = []time.Duration{
 	30 * time.Minute,
 }
 
-func retryDelayFunc(n int, err error, _ *asynq.Task) time.Duration {
-	var rateLimitErr *ratelimit.RateLimitedError
-	if errors.As(err, &rateLimitErr) {
-		return 100 * time.Millisecond
-	}
+func retryDelayFunc(n int, _ error, _ *asynq.Task) time.Duration {
 	if n < len(retryDelays) {
 		return retryDelays[n]
 	}
@@ -108,6 +103,7 @@ func main() {
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
 		log.Fatalf("failed to connect to redis: %v", err)
 	}
+	defer rdb.Close()
 	l.Info("connected to redis for rate limiting")
 
 	limiter := ratelimit.New(rdb, cfg.Worker.RateLimitPerSecond, 1*time.Second)
