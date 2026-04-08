@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/batyray/notification-system/pkg/config"
 	"github.com/batyray/notification-system/pkg/logger"
+	"github.com/batyray/notification-system/pkg/metrics"
 	"github.com/batyray/notification-system/pkg/models"
 	"github.com/batyray/notification-system/pkg/tasks"
 	"github.com/batyray/notification-system/pkg/tracing"
@@ -17,6 +19,9 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	otelmetric "go.opentelemetry.io/otel/metric"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -87,6 +92,22 @@ func main() {
 		l.Info("tracing initialized")
 	}
 
+	metricsHandler, err := metrics.Init("worker")
+	if err != nil {
+		l.Warn("failed to init metrics, continuing without it", "error", err)
+	} else {
+		l.Info("metrics initialized")
+		metricsAddr := fmt.Sprintf(":%d", cfg.Worker.MetricsPort)
+		go func() {
+			mux := http.NewServeMux()
+			mux.Handle("/metrics", metricsHandler)
+			l.Info("metrics server starting", "addr", metricsAddr)
+			if err := http.ListenAndServe(metricsAddr, mux); err != nil {
+				l.Error("metrics server failed", "error", err)
+			}
+		}()
+	}
+
 	db, err := gorm.Open(postgres.Open(cfg.Postgres.DSN()), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("failed to connect to postgres: %v", err)
@@ -113,6 +134,29 @@ func main() {
 		DeliveryClient: deliveryClient,
 		Logger:         l,
 		Limiter:        limiter,
+		Meter:          otel.Meter("worker"),
+	}
+
+	// Register async queue depth gauge
+	if metricsHandler != nil {
+		inspector := asynq.NewInspector(asynq.RedisClientOpt{Addr: cfg.Redis.Addr})
+		meter := otel.Meter("worker")
+		_, _ = meter.Int64ObservableGauge(
+			"worker_queue_depth",
+			otelmetric.WithDescription("Number of pending tasks per queue"),
+			otelmetric.WithInt64Callback(func(_ context.Context, o otelmetric.Int64Observer) error {
+				for queueName := range tasks.AllQueues() {
+					info, err := inspector.GetQueueInfo(queueName)
+					if err != nil {
+						continue
+					}
+					o.Observe(int64(info.Pending), otelmetric.WithAttributes(
+						attribute.String("queue", queueName),
+					))
+				}
+				return nil
+			}),
+		)
 	}
 
 	srv := asynq.NewServer(
