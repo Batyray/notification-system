@@ -12,6 +12,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"github.com/batyray/notification-system/pkg/models"
 	"github.com/batyray/notification-system/pkg/tasks"
 	"github.com/batyray/notification-system/services/api/middleware"
@@ -113,11 +115,15 @@ func (h *Handler) CreateNotification(w http.ResponseWriter, r *http.Request) {
 
 	// Enqueue asynq task if client is available
 	if h.AsynqClient != nil {
+		carrier := make(map[string]string)
+		otel.GetTextMapPropagator().Inject(r.Context(), propagation.MapCarrier(carrier))
+
 		payload := tasks.NotificationPayload{
 			NotificationID: notification.ID,
 			Channel:        string(notification.Channel),
 			Priority:       string(notification.Priority),
 			CorrelationID:  notification.CorrelationID,
+			TraceCarrier:   carrier,
 		}
 
 		task, err := tasks.NewNotificationTask(payload)
