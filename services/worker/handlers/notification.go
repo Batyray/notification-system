@@ -13,6 +13,7 @@ import (
 	"github.com/batyray/notification-system/pkg/models"
 	"github.com/batyray/notification-system/pkg/tasks"
 	"github.com/batyray/notification-system/services/worker/delivery"
+	"github.com/batyray/notification-system/services/worker/ratelimit"
 )
 
 func (h *Handler) HandleNotification(ctx context.Context, task *asynq.Task) error {
@@ -27,6 +28,22 @@ func (h *Handler) HandleNotification(ctx context.Context, task *asynq.Task) erro
 		"channel", payload.Channel,
 		"correlation_id", payload.CorrelationID,
 	)
+
+	// Check rate limit before processing
+	if h.Limiter != nil {
+		allowed, err := h.Limiter.Allow(ctx, payload.Channel)
+		if err != nil {
+			h.Logger.Error("rate limit check failed", "error", err, "channel", payload.Channel)
+			return fmt.Errorf("rate limit check: %w", err)
+		}
+		if !allowed {
+			h.Logger.Warn("rate limited",
+				"channel", payload.Channel,
+				"notification_id", payload.NotificationID,
+			)
+			return &ratelimit.RateLimitedError{Channel: payload.Channel}
+		}
+	}
 
 	var notification models.Notification
 	if err := h.DB.First(&notification, "id = ?", payload.NotificationID).Error; err != nil {
