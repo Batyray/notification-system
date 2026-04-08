@@ -34,3 +34,6 @@ coverage.html
 tmp/
 *.tmp
 *.log
+
+# Worktrees
+.worktrees/
