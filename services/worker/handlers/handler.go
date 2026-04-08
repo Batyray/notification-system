@@ -2,14 +2,13 @@ package handlers
 
 import (
 	"github.com/batyray/notification-system/pkg/logger"
-	"github.com/batyray/notification-system/services/worker/delivery"
 	"github.com/batyray/notification-system/services/worker/ratelimit"
 	"gorm.io/gorm"
 )
 
 type Handler struct {
 	DB             *gorm.DB
-	DeliveryClient *delivery.Client
+	DeliveryClient Sender
 	Logger         *logger.Logger
 	Limiter        *ratelimit.Limiter
 }
