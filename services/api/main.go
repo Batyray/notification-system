@@ -50,7 +50,11 @@ func main() {
 		Logger:      l,
 	}
 
-	r := router.New(h)
+	r := router.New(router.Deps{
+		Handler: h,
+		Redis:   rdb,
+		Logger:  l,
+	})
 
 	addr := fmt.Sprintf(":%d", cfg.API.Port)
 	l.Info("api server starting", "addr", addr)
