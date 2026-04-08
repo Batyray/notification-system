@@ -41,7 +41,7 @@ func main() {
 	if err != nil {
 		l.Warn("failed to init tracing, continuing without it", "error", err)
 	} else {
-		defer shutdownTracer(context.Background())
+		defer func() { _ = shutdownTracer(context.Background()) }()
 		l.Info("tracing initialized")
 	}
 

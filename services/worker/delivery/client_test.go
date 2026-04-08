@@ -17,13 +17,14 @@ func TestClient_Send_Success(t *testing.T) {
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
 		var body map[string]string
-		json.NewDecoder(r.Body).Decode(&body)
+		err := json.NewDecoder(r.Body).Decode(&body)
+		assert.NoError(t, err)
 		assert.Equal(t, "+1234567890", body["to"])
 		assert.Equal(t, "sms", body["channel"])
 		assert.Equal(t, "Hello", body["content"])
 
 		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(SendResponse{
+		_ = json.NewEncoder(w).Encode(SendResponse{
 			MessageID: "msg-123",
 			Status:    "accepted",
 			Timestamp: "2026-03-31T12:00:00Z",

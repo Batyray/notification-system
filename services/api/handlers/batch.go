@@ -110,7 +110,7 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 				if notif.ScheduledAt != nil {
 					opts = append(opts, asynq.ProcessAt(*notif.ScheduledAt))
 				}
-				h.AsynqClient.Enqueue(task, opts...)
+				_, _ = h.AsynqClient.Enqueue(task, opts...)
 			}
 		}
 	}

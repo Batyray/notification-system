@@ -53,13 +53,13 @@ func Idempotency(rdb *redis.Client, ttl time.Duration) func(http.Handler) http.H
 						w.Header().Set(k, v)
 					}
 					w.WriteHeader(cached.StatusCode)
-					w.Write([]byte(cached.Body))
+					_, _ = w.Write([]byte(cached.Body))
 					return
 				}
 			}
 
 			// Lock to prevent concurrent duplicate processing
-			set, err := rdb.SetNX(ctx, redisKey+":lock", "processing", 30*time.Second).Result()
+			set, err := rdb.SetNX(ctx, redisKey+":lock", "processing", 30*time.Second).Result() //nolint:staticcheck // SetNX is simpler than SetArgs equivalent
 			if err != nil || !set {
 				http.Error(w, `{"error":"duplicate request in progress"}`, http.StatusConflict)
 				return

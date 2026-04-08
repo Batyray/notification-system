@@ -80,7 +80,7 @@ func createTestTask(t *testing.T, notificationID uuid.UUID, channel, priority st
 func TestHandleNotification_CreatesTraceSpans(t *testing.T) {
 	exporter := tracetest.NewInMemoryExporter()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
-	defer tp.Shutdown(context.Background())
+	defer func() { _ = tp.Shutdown(context.Background()) }()
 	otel.SetTracerProvider(tp)
 
 	mock := &mockSender{

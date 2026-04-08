@@ -25,7 +25,7 @@ func TestIdempotency_NoHeader_PassesThrough(t *testing.T) {
 	handler := Idempotency(rdb, 24*time.Hour)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(`{"id":"123"}`))
+		_, _ = w.Write([]byte(`{"id":"123"}`))
 	}))
 
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -41,7 +41,7 @@ func TestIdempotency_FirstRequest_Stores(t *testing.T) {
 	handler := Idempotency(rdb, 24*time.Hour)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(`{"id":"123"}`))
+		_, _ = w.Write([]byte(`{"id":"123"}`))
 	}))
 
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -63,7 +63,7 @@ func TestIdempotency_DuplicateRequest_ReturnsCached(t *testing.T) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(`{"id":"123"}`))
+		_, _ = w.Write([]byte(`{"id":"123"}`))
 	}))
 
 	req1 := httptest.NewRequest(http.MethodPost, "/", nil)

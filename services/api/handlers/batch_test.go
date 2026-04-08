@@ -79,7 +79,8 @@ func TestGetBatchNotifications_Success(t *testing.T) {
 	h.CreateBatch(w, req)
 
 	var createResp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &createResp)
+	err := json.Unmarshal(w.Body.Bytes(), &createResp)
+	assert.NoError(t, err)
 	batchID := createResp["batch_id"].(string)
 
 	rctx := chi.NewRouteContext()
@@ -91,7 +92,8 @@ func TestGetBatchNotifications_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, getW.Code)
 	var resp map[string]interface{}
-	json.Unmarshal(getW.Body.Bytes(), &resp)
+	err = json.Unmarshal(getW.Body.Bytes(), &resp)
+	assert.NoError(t, err)
 	data := resp["data"].([]interface{})
 	assert.Len(t, data, 2)
 }
