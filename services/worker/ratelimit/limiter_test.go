@@ -72,7 +72,9 @@ func TestAllow_ChannelsAreIsolated(t *testing.T) {
 }
 
 func TestAllow_WindowExpiry(t *testing.T) {
-	limiter, mr := setupLimiter(t, 2, 1*time.Second)
+	// Use a short window so we can wait for real time to pass,
+	// testing the sliding window ZREMRANGEBYSCORE prune (not just TTL expiry).
+	limiter, _ := setupLimiter(t, 2, 150*time.Millisecond)
 	ctx := context.Background()
 
 	// Fill up the limit
@@ -87,10 +89,10 @@ func TestAllow_WindowExpiry(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, allowed)
 
-	// Fast forward past the window
-	mr.FastForward(2 * time.Second)
+	// Wait for real time to pass beyond the window
+	time.Sleep(200 * time.Millisecond)
 
-	// Should be allowed again
+	// Should be allowed again — old entries pruned by ZREMRANGEBYSCORE
 	allowed, err = limiter.Allow(ctx, "push")
 	require.NoError(t, err)
 	assert.True(t, allowed, "should be allowed after window expiry")

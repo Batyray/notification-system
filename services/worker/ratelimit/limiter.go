@@ -45,7 +45,7 @@ type RateLimitedError struct {
 }
 
 func (e *RateLimitedError) Error() string {
-	return fmt.Sprintf("rate limited on channel: %s", e.Channel)
+	return fmt.Sprintf("rate limited on channel %s", e.Channel)
 }
 
 // Limiter implements a sliding window rate limiter backed by Redis sorted sets.
