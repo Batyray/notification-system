@@ -9,6 +9,7 @@ import (
 	"github.com/batyray/notification-system/pkg/logger"
 	"github.com/batyray/notification-system/services/api/handlers"
 	"github.com/batyray/notification-system/services/api/middleware"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 type Deps struct {
@@ -26,6 +27,7 @@ func New(deps Deps) *chi.Mux {
 	r.Use(middleware.Logging(deps.Logger))
 
 	r.Get("/health", deps.Handler.HealthCheck)
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/notifications", func(r chi.Router) {

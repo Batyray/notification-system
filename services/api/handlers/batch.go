@@ -21,6 +21,17 @@ type BatchCreateResponse struct {
 	NotificationIDs []uuid.UUID `json:"notification_ids"`
 }
 
+// CreateBatch godoc
+// @Summary Create a batch of notifications
+// @Description Create multiple notifications in a single request
+// @Tags notifications
+// @Accept json
+// @Produce json
+// @Param Idempotency-Key header string false "Idempotency key"
+// @Param request body BatchCreateRequest true "Batch notification request"
+// @Success 201 {object} BatchCreateResponse
+// @Failure 400 {object} ErrorResponse
+// @Router /notifications/batch [post]
 func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 	var req BatchCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -110,6 +121,15 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetBatchNotifications godoc
+// @Summary Get notifications by batch ID
+// @Description Retrieve all notifications belonging to a batch
+// @Tags notifications
+// @Produce json
+// @Param batchId path string true "Batch ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} ErrorResponse
+// @Router /notifications/batch/{batchId} [get]
 func (h *Handler) GetBatchNotifications(w http.ResponseWriter, r *http.Request) {
 	batchIDStr := chi.URLParam(r, "batchId")
 	batchID, err := uuid.Parse(batchIDStr)

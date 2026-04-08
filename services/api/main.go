@@ -8,6 +8,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
+	_ "github.com/batyray/notification-system/docs/swagger"
 	"github.com/batyray/notification-system/pkg/config"
 	"github.com/batyray/notification-system/pkg/logger"
 	"github.com/batyray/notification-system/pkg/tracing"
@@ -17,6 +18,12 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
+
+// @title Notification System API
+// @version 1.0
+// @description Event-driven notification system for SMS, Email, and Push channels
+// @host localhost:8080
+// @BasePath /api/v1
 
 func main() {
 	cfg, err := config.Load()

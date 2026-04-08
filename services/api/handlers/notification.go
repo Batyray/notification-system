@@ -33,7 +33,18 @@ type ErrorResponse struct {
 	Details string `json:"details,omitempty"`
 }
 
-// CreateNotification validates the request, persists to DB, and enqueues an asynq task.
+// CreateNotification godoc
+// @Summary Create a notification
+// @Description Create a new notification request
+// @Tags notifications
+// @Accept json
+// @Produce json
+// @Param Idempotency-Key header string false "Idempotency key"
+// @Param request body CreateNotificationRequest true "Notification request"
+// @Success 201 {object} models.Notification
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /notifications [post]
 func (h *Handler) CreateNotification(w http.ResponseWriter, r *http.Request) {
 	var req CreateNotificationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -132,7 +143,15 @@ func (h *Handler) CreateNotification(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusCreated, notification)
 }
 
-// GetNotification retrieves a single notification by its UUID.
+// GetNotification godoc
+// @Summary Get a notification
+// @Description Retrieve a single notification by its UUID
+// @Tags notifications
+// @Produce json
+// @Param id path string true "Notification ID"
+// @Success 200 {object} models.Notification
+// @Failure 404 {object} ErrorResponse
+// @Router /notifications/{id} [get]
 func (h *Handler) GetNotification(w http.ResponseWriter, r *http.Request) {
 	idParam := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idParam)
@@ -150,7 +169,16 @@ func (h *Handler) GetNotification(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, notification)
 }
 
-// CancelNotification cancels a notification only if it is in "pending" status.
+// CancelNotification godoc
+// @Summary Cancel a notification
+// @Description Cancel a notification only if it is in pending status
+// @Tags notifications
+// @Produce json
+// @Param id path string true "Notification ID"
+// @Success 200 {object} models.Notification
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Router /notifications/{id}/cancel [patch]
 func (h *Handler) CancelNotification(w http.ResponseWriter, r *http.Request) {
 	idParam := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idParam)
@@ -182,7 +210,19 @@ func (h *Handler) CancelNotification(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, notification)
 }
 
-// ListNotifications returns a cursor-paginated list of notifications with optional filters.
+// ListNotifications godoc
+// @Summary List notifications
+// @Description Returns a cursor-paginated list of notifications with optional filters
+// @Tags notifications
+// @Produce json
+// @Param status query string false "Filter by status"
+// @Param channel query string false "Filter by channel"
+// @Param from query string false "Filter by created_at >= from (RFC3339)"
+// @Param to query string false "Filter by created_at <= to (RFC3339)"
+// @Param cursor query string false "Pagination cursor"
+// @Param page_size query string false "Number of results per page"
+// @Success 200 {object} map[string]interface{}
+// @Router /notifications [get]
 func (h *Handler) ListNotifications(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 

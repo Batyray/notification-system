@@ -25,6 +25,13 @@ type DeliveryMetrics struct {
 	AvgLatencyMs float64 `json:"avg_latency_ms"`
 }
 
+// GetMetrics godoc
+// @Summary Get system metrics
+// @Description Returns delivery metrics and queue statistics
+// @Tags metrics
+// @Produce json
+// @Success 200 {object} MetricsResponse
+// @Router /metrics [get]
 func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	var totalSent, totalFailed int64
 	h.DB.Model(&models.Notification{}).Where("status = ?", models.StatusSent).Count(&totalSent)
