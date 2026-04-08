@@ -11,8 +11,10 @@ import (
 	"github.com/batyray/notification-system/pkg/logger"
 	"github.com/batyray/notification-system/pkg/models"
 	"github.com/batyray/notification-system/pkg/tasks"
+	"github.com/batyray/notification-system/pkg/tracing"
 	"github.com/batyray/notification-system/services/worker/delivery"
 	"github.com/batyray/notification-system/services/worker/handlers"
+	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -75,11 +77,23 @@ func main() {
 		Version:     cfg.AppVersion,
 	})
 
+	shutdownTracer, err := tracing.Init(context.Background(), "worker", cfg.OTLPEndpoint)
+	if err != nil {
+		l.Warn("failed to init tracing, continuing without it", "error", err)
+	} else {
+		defer shutdownTracer(context.Background())
+		l.Info("tracing initialized")
+	}
+
 	db, err := gorm.Open(postgres.Open(cfg.Postgres.DSN()), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("failed to connect to postgres: %v", err)
 	}
 	l.Info("connected to postgresql")
+
+	if err := db.Use(otelgorm.NewPlugin()); err != nil {
+		l.Warn("failed to add GORM tracing plugin", "error", err)
+	}
 
 	deliveryClient := delivery.NewClient(cfg.Worker.WebhookURL)
 

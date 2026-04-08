@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,8 +10,10 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/batyray/notification-system/pkg/config"
 	"github.com/batyray/notification-system/pkg/logger"
+	"github.com/batyray/notification-system/pkg/tracing"
 	"github.com/batyray/notification-system/services/api/handlers"
 	"github.com/batyray/notification-system/services/api/router"
+	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -27,11 +30,23 @@ func main() {
 		Version:     cfg.AppVersion,
 	})
 
+	shutdownTracer, err := tracing.Init(context.Background(), "api", cfg.OTLPEndpoint)
+	if err != nil {
+		l.Warn("failed to init tracing, continuing without it", "error", err)
+	} else {
+		defer shutdownTracer(context.Background())
+		l.Info("tracing initialized")
+	}
+
 	db, err := gorm.Open(postgres.Open(cfg.Postgres.DSN()), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("failed to connect to postgres: %v", err)
 	}
 	l.Info("connected to postgresql")
+
+	if err := db.Use(otelgorm.NewPlugin()); err != nil {
+		l.Warn("failed to add GORM tracing plugin", "error", err)
+	}
 
 	rdb := redis.NewClient(&redis.Options{
 		Addr: cfg.Redis.Addr,
