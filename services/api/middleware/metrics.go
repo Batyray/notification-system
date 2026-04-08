@@ -35,10 +35,8 @@ func Metrics(serviceName string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 
-			attrs := []attribute.KeyValue{
-				attribute.String("http.method", r.Method),
-			}
-			activeRequests.Add(r.Context(), 1, metric.WithAttributes(attrs...))
+			methodAttr := attribute.String("http.method", r.Method)
+			activeRequests.Add(r.Context(), 1, metric.WithAttributes(methodAttr))
 
 			rec := &statusRecorder{ResponseWriter: w, statusCode: http.StatusOK}
 			next.ServeHTTP(rec, r)
@@ -51,17 +49,15 @@ func Metrics(serviceName string) func(http.Handler) http.Handler {
 				}
 			}
 
-			attrs = append(attrs,
+			attrs := []attribute.KeyValue{
+				methodAttr,
 				attribute.String("http.route", route),
 				attribute.String("http.status_code", fmt.Sprintf("%d", rec.statusCode)),
-			)
+			}
 
 			duration.Record(r.Context(), time.Since(start).Seconds(), metric.WithAttributes(attrs...))
 			requestCount.Add(r.Context(), 1, metric.WithAttributes(attrs...))
-			activeRequests.Add(r.Context(), -1, metric.WithAttributes(
-				attribute.String("http.method", r.Method),
-				attribute.String("http.route", route),
-			))
+			activeRequests.Add(r.Context(), -1, metric.WithAttributes(methodAttr))
 		})
 	}
 }

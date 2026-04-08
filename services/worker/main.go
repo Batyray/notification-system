@@ -92,10 +92,11 @@ func main() {
 		l.Info("tracing initialized")
 	}
 
-	metricsHandler, err := metrics.Init("worker")
+	metricsHandler, shutdownMetrics, err := metrics.Init("worker")
 	if err != nil {
 		l.Warn("failed to init metrics, continuing without it", "error", err)
 	} else {
+		defer func() { _ = shutdownMetrics(context.Background()) }()
 		l.Info("metrics initialized")
 		metricsAddr := fmt.Sprintf(":%d", cfg.Worker.MetricsPort)
 		go func() {
@@ -136,6 +137,7 @@ func main() {
 		Limiter:        limiter,
 		Meter:          otel.Meter("worker"),
 	}
+	h.InitMetrics()
 
 	// Register async queue depth gauge
 	if metricsHandler != nil {

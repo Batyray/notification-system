@@ -14,7 +14,7 @@ import (
 )
 
 func TestMetricsMiddleware_RecordsRequestMetrics(t *testing.T) {
-	metricsHandler, err := metrics.Init("test-api")
+	metricsHandler, _, err := metrics.Init("test-api")
 	require.NoError(t, err)
 
 	r := chi.NewRouter()

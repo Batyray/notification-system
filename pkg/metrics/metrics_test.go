@@ -12,9 +12,10 @@ import (
 )
 
 func TestInit_ReturnsWorkingHandler(t *testing.T) {
-	handler, err := metrics.Init("test-service")
+	handler, shutdown, err := metrics.Init("test-service")
 	require.NoError(t, err)
 	require.NotNil(t, handler)
+	require.NotNil(t, shutdown)
 
 	// The handler should serve Prometheus metrics format
 	rec := httptest.NewRecorder()

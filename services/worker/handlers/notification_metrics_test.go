@@ -20,7 +20,7 @@ import (
 func TestHandleNotification_RecordsMetrics(t *testing.T) {
 	// Init registers the OTel MeterProvider with a Prometheus exporter and
 	// returns an http.Handler that can be scraped for metrics.
-	metricsHandler, err := metrics.Init("test-worker")
+	metricsHandler, _, err := metrics.Init("test-worker")
 	require.NoError(t, err)
 
 	mock := &mockSender{
@@ -48,9 +48,10 @@ func TestHandleNotification_RecordsMetrics(t *testing.T) {
 	h := &Handler{
 		DB:             db,
 		DeliveryClient: mock,
-		Logger: setupTestLogger(),
+		Logger:         setupTestLogger(),
 		Meter:          otel.Meter("test-worker"),
 	}
+	h.InitMetrics()
 
 	asynqTask := createTestTask(t, notificationID, "sms", "normal")
 

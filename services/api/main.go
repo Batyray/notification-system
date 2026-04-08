@@ -46,10 +46,11 @@ func main() {
 		l.Info("tracing initialized")
 	}
 
-	metricsHandler, err := metrics.Init("api")
+	metricsHandler, shutdownMetrics, err := metrics.Init("api")
 	if err != nil {
 		l.Warn("failed to init metrics, continuing without it", "error", err)
 	} else {
+		defer func() { _ = shutdownMetrics(context.Background()) }()
 		l.Info("metrics initialized")
 	}
 
