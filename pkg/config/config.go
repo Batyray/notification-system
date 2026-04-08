@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -38,10 +40,14 @@ type APIConfig struct {
 }
 
 type WorkerConfig struct {
-	WebhookURL string
+	WebhookURL         string
+	RateLimitPerSecond int
 }
 
 func Load() (*Config, error) {
+	// Load .env file if present (ignored if missing)
+	_ = godotenv.Load()
+
 	cfg := &Config{
 		Postgres: PostgresConfig{
 			Host:     envOrDefault("POSTGRES_HOST", "localhost"),
@@ -57,11 +63,12 @@ func Load() (*Config, error) {
 			Port: envOrDefaultInt("API_PORT", 8080),
 		},
 		Worker: WorkerConfig{
-			WebhookURL: envOrDefault("WEBHOOK_URL", ""),
+			WebhookURL:         envOrDefault("WEBHOOK_URL", ""),
+			RateLimitPerSecond: envOrDefaultInt("RATE_LIMIT_PER_SECOND", 100),
 		},
 		Environment:  envOrDefault("ENVIRONMENT", "development"),
 		AppVersion:   envOrDefault("APP_VERSION", "0.1.0"),
-		OTLPEndpoint: envOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
+		OTLPEndpoint: envOrDefault("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4318"),
 	}
 
 	return cfg, nil
