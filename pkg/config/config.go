@@ -42,6 +42,7 @@ type APIConfig struct {
 type WorkerConfig struct {
 	WebhookURL         string
 	RateLimitPerSecond int
+	MetricsPort        int
 }
 
 func Load() (*Config, error) {
@@ -65,6 +66,7 @@ func Load() (*Config, error) {
 		Worker: WorkerConfig{
 			WebhookURL:         envOrDefault("WEBHOOK_URL", ""),
 			RateLimitPerSecond: envOrDefaultInt("RATE_LIMIT_PER_SECOND", 100),
+			MetricsPort:        envOrDefaultInt("METRICS_PORT", 9090),
 		},
 		Environment:  envOrDefault("ENVIRONMENT", "development"),
 		AppVersion:   envOrDefault("APP_VERSION", "0.1.0"),
