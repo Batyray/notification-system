@@ -76,7 +76,7 @@ func (c *Client) Send(ctx context.Context, req SendRequest) (*SendResponse, erro
 	if err != nil {
 		return nil, &SendError{StatusCode: 0, Body: err.Error()}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusAccepted {
 		return nil, &SendError{StatusCode: resp.StatusCode}

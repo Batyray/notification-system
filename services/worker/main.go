@@ -125,7 +125,7 @@ func main() {
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
 		log.Fatalf("failed to connect to redis: %v", err)
 	}
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 	l.Info("connected to redis for rate limiting")
 
 	limiter := ratelimit.New(rdb, cfg.Worker.RateLimitPerSecond, 1*time.Second)

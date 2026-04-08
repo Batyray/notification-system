@@ -72,7 +72,7 @@ func main() {
 	asynqClient := asynq.NewClient(asynq.RedisClientOpt{
 		Addr: cfg.Redis.Addr,
 	})
-	defer asynqClient.Close()
+	defer func() { _ = asynqClient.Close() }()
 
 	h := &handlers.Handler{
 		DB:          db,

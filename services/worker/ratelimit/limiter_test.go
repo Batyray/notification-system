@@ -20,7 +20,7 @@ func setupLimiter(t *testing.T, limit int, window time.Duration) (*Limiter, *min
 	rdb := redis.NewClient(&redis.Options{
 		Addr: mr.Addr(),
 	})
-	t.Cleanup(func() { rdb.Close() })
+	t.Cleanup(func() { _ = rdb.Close() })
 
 	return New(rdb, limit, window), mr
 }
