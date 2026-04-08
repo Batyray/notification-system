@@ -10,6 +10,11 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"github.com/batyray/notification-system/pkg/models"
 	"github.com/batyray/notification-system/pkg/tasks"
 	"github.com/batyray/notification-system/services/worker/delivery"
@@ -21,6 +26,21 @@ func (h *Handler) HandleNotification(ctx context.Context, task *asynq.Task) erro
 		h.Logger.Error("failed to parse payload", "error", err)
 		return fmt.Errorf("parse payload: %w", err)
 	}
+
+	// Extract trace context from the task payload (propagated from API).
+	if payload.TraceCarrier != nil {
+		ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier(payload.TraceCarrier))
+	}
+
+	tracer := otel.Tracer("worker")
+	ctx, span := tracer.Start(ctx, "worker.HandleNotification",
+		trace.WithAttributes(
+			attribute.String("notification.id", payload.NotificationID.String()),
+			attribute.String("notification.channel", payload.Channel),
+			attribute.String("notification.correlation_id", payload.CorrelationID),
+		),
+	)
+	defer span.End()
 
 	h.Logger.Info("processing notification",
 		"notification_id", payload.NotificationID,
@@ -84,12 +104,34 @@ func (h *Handler) HandleNotification(ctx context.Context, task *asynq.Task) erro
 		content = rendered
 	}
 
+	_, deliverySpan := tracer.Start(ctx, "webhook.deliver",
+		trace.WithAttributes(
+			attribute.String("notification.id", payload.NotificationID.String()),
+			attribute.String("notification.channel", string(notification.Channel)),
+			attribute.String("notification.recipient", notification.Recipient),
+		),
+	)
+
 	resp, err := h.DeliveryClient.Send(ctx, delivery.SendRequest{
 		To:            notification.Recipient,
 		Channel:       string(notification.Channel),
 		Content:       content,
 		CorrelationID: notification.CorrelationID,
 	})
+
+	if err != nil {
+		deliverySpan.RecordError(err)
+		deliverySpan.SetStatus(codes.Error, err.Error())
+		var sendErr *delivery.SendError
+		if errors.As(err, &sendErr) {
+			deliverySpan.SetAttributes(attribute.Int("http.status_code", sendErr.StatusCode))
+		}
+		deliverySpan.End()
+	} else {
+		deliverySpan.SetAttributes(attribute.Int("http.status_code", 202))
+		deliverySpan.SetStatus(codes.Ok, "")
+		deliverySpan.End()
+	}
 
 	if err != nil {
 		var sendErr *delivery.SendError

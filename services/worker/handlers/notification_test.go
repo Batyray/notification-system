@@ -14,6 +14,9 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"github.com/batyray/notification-system/pkg/logger"
 	"github.com/batyray/notification-system/pkg/models"
 	"github.com/batyray/notification-system/pkg/tasks"
@@ -67,10 +70,58 @@ func createTestTask(t *testing.T, notificationID uuid.UUID, channel, priority st
 		Channel:        channel,
 		Priority:       priority,
 		CorrelationID:  "test-corr-id",
+		TraceCarrier:   nil,
 	}
 	data, err := json.Marshal(payload)
 	require.NoError(t, err)
 	return asynq.NewTask(tasks.TypeNotificationSMS, data)
+}
+
+func TestHandleNotification_CreatesTraceSpans(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	defer tp.Shutdown(context.Background())
+	otel.SetTracerProvider(tp)
+
+	mock := &mockSender{
+		SendFunc: func(ctx context.Context, req delivery.SendRequest) (*delivery.SendResponse, error) {
+			return &delivery.SendResponse{
+				MessageID: "msg-trace-123",
+				Status:    "accepted",
+				Timestamp: "2026-04-08T12:00:00Z",
+			}, nil
+		},
+	}
+
+	db := setupTestDB(t)
+	notificationID := uuid.New()
+	notification := models.Notification{
+		ID:        notificationID,
+		Recipient: "+1234567890",
+		Channel:   models.ChannelSMS,
+		Content:   "Hello Traced",
+		Priority:  models.PriorityNormal,
+		Status:    models.StatusPending,
+	}
+	require.NoError(t, db.Create(&notification).Error)
+
+	h := &Handler{
+		DB:             db,
+		DeliveryClient: mock,
+		Logger:         setupTestLogger(),
+	}
+
+	task := createTestTask(t, notificationID, "sms", "normal")
+	err := h.HandleNotification(context.Background(), task)
+	require.NoError(t, err)
+
+	spans := exporter.GetSpans()
+	spanNames := make([]string, len(spans))
+	for i, s := range spans {
+		spanNames[i] = s.Name
+	}
+	assert.Contains(t, spanNames, "worker.HandleNotification")
+	assert.Contains(t, spanNames, "webhook.deliver")
 }
 
 func TestHandleNotification_Success(t *testing.T) {
