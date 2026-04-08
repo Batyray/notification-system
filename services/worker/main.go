@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
 	"github.com/batyray/notification-system/pkg/config"
 	"github.com/batyray/notification-system/pkg/logger"
 	"github.com/batyray/notification-system/pkg/models"
@@ -14,6 +16,7 @@ import (
 	"github.com/batyray/notification-system/pkg/tracing"
 	"github.com/batyray/notification-system/services/worker/delivery"
 	"github.com/batyray/notification-system/services/worker/handlers"
+	"github.com/batyray/notification-system/services/worker/ratelimit"
 	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -27,7 +30,11 @@ var retryDelays = []time.Duration{
 	30 * time.Minute,
 }
 
-func retryDelayFunc(n int, _ error, _ *asynq.Task) time.Duration {
+func retryDelayFunc(n int, err error, _ *asynq.Task) time.Duration {
+	var rateLimitErr *ratelimit.RateLimitedError
+	if errors.As(err, &rateLimitErr) {
+		return 100 * time.Millisecond
+	}
 	if n < len(retryDelays) {
 		return retryDelays[n]
 	}
@@ -97,10 +104,19 @@ func main() {
 
 	deliveryClient := delivery.NewClient(cfg.Worker.WebhookURL)
 
+	rdb := redis.NewClient(&redis.Options{Addr: cfg.Redis.Addr})
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		log.Fatalf("failed to connect to redis: %v", err)
+	}
+	l.Info("connected to redis for rate limiting")
+
+	limiter := ratelimit.New(rdb, cfg.Worker.RateLimitPerSecond, 1*time.Second)
+
 	h := &handlers.Handler{
 		DB:             db,
 		DeliveryClient: deliveryClient,
 		Logger:         l,
+		Limiter:        limiter,
 	}
 
 	srv := asynq.NewServer(
@@ -121,7 +137,11 @@ func main() {
 	mux.HandleFunc(tasks.TypeNotificationEmail, h.HandleNotification)
 	mux.HandleFunc(tasks.TypeNotificationPush, h.HandleNotification)
 
-	l.Info("worker starting", "concurrency", 50, "queues", len(tasks.AllQueues()))
+	l.Info("worker starting",
+		"concurrency", 50,
+		"queues", len(tasks.AllQueues()),
+		"rate_limit_per_second", cfg.Worker.RateLimitPerSecond,
+	)
 	if err := srv.Run(mux); err != nil {
 		log.Fatalf("worker failed: %v", err)
 	}
