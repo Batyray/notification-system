@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -41,6 +42,34 @@ func (h *Handler) HandleNotification(ctx context.Context, task *asynq.Task) erro
 		),
 	)
 	defer span.End()
+
+	start := time.Now()
+	var taskDuration metric.Float64Histogram
+	var taskCount metric.Int64Counter
+	var activeTasks metric.Int64UpDownCounter
+
+	if h.Meter != nil {
+		taskDuration, _ = h.Meter.Float64Histogram(
+			"worker_task_duration_seconds",
+			metric.WithDescription("Task processing duration in seconds"),
+			metric.WithUnit("s"),
+		)
+		taskCount, _ = h.Meter.Int64Counter(
+			"worker_tasks_processed_total",
+			metric.WithDescription("Total tasks processed"),
+		)
+		activeTasks, _ = h.Meter.Int64UpDownCounter(
+			"worker_active_tasks",
+			metric.WithDescription("Number of in-flight tasks"),
+		)
+
+		channelAttr := attribute.String("channel", payload.Channel)
+		activeTasks.Add(ctx, 1, metric.WithAttributes(channelAttr))
+		defer func() {
+			activeTasks.Add(ctx, -1, metric.WithAttributes(channelAttr))
+			taskDuration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(channelAttr))
+		}()
+	}
 
 	h.Logger.Info("processing notification",
 		"notification_id", payload.NotificationID,
@@ -99,6 +128,12 @@ func (h *Handler) HandleNotification(ctx context.Context, task *asynq.Task) erro
 			notification.Status = models.StatusFailed
 			notification.ErrorMessage = &errMsg
 			h.DB.Save(&notification)
+			if taskCount != nil {
+				taskCount.Add(ctx, 1, metric.WithAttributes(
+					attribute.String("channel", payload.Channel),
+					attribute.String("status", "failed"),
+				))
+			}
 			return asynq.SkipRetry
 		}
 		content = rendered
@@ -155,6 +190,12 @@ func (h *Handler) HandleNotification(ctx context.Context, task *asynq.Task) erro
 				"notification_id", payload.NotificationID,
 				"status_code", sendErr.StatusCode,
 			)
+			if taskCount != nil {
+				taskCount.Add(ctx, 1, metric.WithAttributes(
+					attribute.String("channel", payload.Channel),
+					attribute.String("status", "failed"),
+				))
+			}
 			return asynq.SkipRetry
 		}
 
@@ -162,6 +203,12 @@ func (h *Handler) HandleNotification(ctx context.Context, task *asynq.Task) erro
 		notification.Status = models.StatusFailed
 		notification.ErrorMessage = &errMsg
 		h.DB.Save(&notification)
+		if taskCount != nil {
+			taskCount.Add(ctx, 1, metric.WithAttributes(
+				attribute.String("channel", payload.Channel),
+				attribute.String("status", "failed"),
+			))
+		}
 		return fmt.Errorf("delivery error: %w", err)
 	}
 
@@ -178,6 +225,13 @@ func (h *Handler) HandleNotification(ctx context.Context, task *asynq.Task) erro
 		"notification_id", payload.NotificationID,
 		"provider_message_id", resp.MessageID,
 	)
+
+	if taskCount != nil {
+		taskCount.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("channel", payload.Channel),
+			attribute.String("status", "success"),
+		))
+	}
 
 	return nil
 }
