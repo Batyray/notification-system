@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -76,15 +74,15 @@ func createTestTask(t *testing.T, notificationID uuid.UUID, channel, priority st
 }
 
 func TestHandleNotification_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(delivery.SendResponse{
-			MessageID: "provider-msg-123",
-			Status:    "accepted",
-			Timestamp: "2026-03-31T12:00:00Z",
-		})
-	}))
-	defer server.Close()
+	mock := &mockSender{
+		SendFunc: func(ctx context.Context, req delivery.SendRequest) (*delivery.SendResponse, error) {
+			return &delivery.SendResponse{
+				MessageID: "provider-msg-123",
+				Status:    "accepted",
+				Timestamp: "2026-03-31T12:00:00Z",
+			}, nil
+		},
+	}
 
 	db := setupTestDB(t)
 	notificationID := uuid.New()
@@ -100,7 +98,7 @@ func TestHandleNotification_Success(t *testing.T) {
 
 	h := &Handler{
 		DB:             db,
-		DeliveryClient: delivery.NewClient(server.URL),
+		DeliveryClient: mock,
 		Logger:         setupTestLogger(),
 	}
 
@@ -115,13 +113,18 @@ func TestHandleNotification_Success(t *testing.T) {
 	assert.Equal(t, "provider-msg-123", *updated.ProviderMessageID)
 	assert.NotNil(t, updated.SentAt)
 	assert.Equal(t, 1, updated.RetryCount)
+
+	require.Len(t, mock.Calls, 1)
+	assert.Equal(t, "+1234567890", mock.Calls[0].To)
+	assert.Equal(t, "sms", mock.Calls[0].Channel)
 }
 
 func TestHandleNotification_TransientError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer server.Close()
+	mock := &mockSender{
+		SendFunc: func(ctx context.Context, req delivery.SendRequest) (*delivery.SendResponse, error) {
+			return nil, &delivery.SendError{StatusCode: http.StatusInternalServerError}
+		},
+	}
 
 	db := setupTestDB(t)
 	notificationID := uuid.New()
@@ -137,7 +140,7 @@ func TestHandleNotification_TransientError(t *testing.T) {
 
 	h := &Handler{
 		DB:             db,
-		DeliveryClient: delivery.NewClient(server.URL),
+		DeliveryClient: mock,
 		Logger:         setupTestLogger(),
 	}
 
@@ -153,10 +156,11 @@ func TestHandleNotification_TransientError(t *testing.T) {
 }
 
 func TestHandleNotification_PermanentError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadRequest)
-	}))
-	defer server.Close()
+	mock := &mockSender{
+		SendFunc: func(ctx context.Context, req delivery.SendRequest) (*delivery.SendResponse, error) {
+			return nil, &delivery.SendError{StatusCode: http.StatusBadRequest}
+		},
+	}
 
 	db := setupTestDB(t)
 	notificationID := uuid.New()
@@ -172,7 +176,7 @@ func TestHandleNotification_PermanentError(t *testing.T) {
 
 	h := &Handler{
 		DB:             db,
-		DeliveryClient: delivery.NewClient(server.URL),
+		DeliveryClient: mock,
 		Logger:         setupTestLogger(),
 	}
 
@@ -187,20 +191,15 @@ func TestHandleNotification_PermanentError(t *testing.T) {
 }
 
 func TestHandleNotification_WithTemplate(t *testing.T) {
-	var receivedContent string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]string
-		json.NewDecoder(r.Body).Decode(&body)
-		receivedContent = body["content"]
-
-		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(delivery.SendResponse{
-			MessageID: "msg-tmpl-123",
-			Status:    "accepted",
-			Timestamp: "2026-03-31T12:00:00Z",
-		})
-	}))
-	defer server.Close()
+	mock := &mockSender{
+		SendFunc: func(ctx context.Context, req delivery.SendRequest) (*delivery.SendResponse, error) {
+			return &delivery.SendResponse{
+				MessageID: "msg-tmpl-123",
+				Status:    "accepted",
+				Timestamp: "2026-03-31T12:00:00Z",
+			}, nil
+		},
+	}
 
 	db := setupTestDB(t)
 	notificationID := uuid.New()
@@ -218,7 +217,7 @@ func TestHandleNotification_WithTemplate(t *testing.T) {
 
 	h := &Handler{
 		DB:             db,
-		DeliveryClient: delivery.NewClient(server.URL),
+		DeliveryClient: mock,
 		Logger:         setupTestLogger(),
 	}
 
@@ -226,7 +225,8 @@ func TestHandleNotification_WithTemplate(t *testing.T) {
 	err := h.HandleNotification(context.Background(), task)
 	require.NoError(t, err)
 
-	assert.Equal(t, "Hello Alice, welcome!", receivedContent)
+	require.Len(t, mock.Calls, 1)
+	assert.Equal(t, "Hello Alice, welcome!", mock.Calls[0].Content)
 
 	var updated models.Notification
 	require.NoError(t, db.First(&updated, "id = ?", notificationID).Error)
@@ -234,12 +234,12 @@ func TestHandleNotification_WithTemplate(t *testing.T) {
 }
 
 func TestHandleNotification_CancelledSkipped(t *testing.T) {
-	var serverCalled atomic.Bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		serverCalled.Store(true)
-		w.WriteHeader(http.StatusAccepted)
-	}))
-	defer server.Close()
+	mock := &mockSender{
+		SendFunc: func(ctx context.Context, req delivery.SendRequest) (*delivery.SendResponse, error) {
+			t.Fatal("delivery should not have been called for cancelled notification")
+			return nil, nil
+		},
+	}
 
 	db := setupTestDB(t)
 	notificationID := uuid.New()
@@ -255,7 +255,7 @@ func TestHandleNotification_CancelledSkipped(t *testing.T) {
 
 	h := &Handler{
 		DB:             db,
-		DeliveryClient: delivery.NewClient(server.URL),
+		DeliveryClient: mock,
 		Logger:         setupTestLogger(),
 	}
 
@@ -263,19 +263,19 @@ func TestHandleNotification_CancelledSkipped(t *testing.T) {
 	err := h.HandleNotification(context.Background(), task)
 	require.NoError(t, err)
 
-	assert.False(t, serverCalled.Load(), "delivery server should not have been called for cancelled notification")
+	assert.Empty(t, mock.Calls)
 }
 
 func TestHandleNotification_RateLimited_WaitsAndProceeds(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(delivery.SendResponse{
-			MessageID: "msg-rate-limited",
-			Status:    "accepted",
-			Timestamp: "2026-04-08T12:00:00Z",
-		})
-	}))
-	defer server.Close()
+	mock := &mockSender{
+		SendFunc: func(ctx context.Context, req delivery.SendRequest) (*delivery.SendResponse, error) {
+			return &delivery.SendResponse{
+				MessageID: "msg-rate-limited",
+				Status:    "accepted",
+				Timestamp: "2026-04-08T12:00:00Z",
+			}, nil
+		},
+	}
 
 	db := setupTestDB(t)
 	notificationID := uuid.New()
@@ -291,23 +291,20 @@ func TestHandleNotification_RateLimited_WaitsAndProceeds(t *testing.T) {
 
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	// Short window so the handler can proceed after waiting
 	limiter := ratelimit.New(rdb, 1, 150*time.Millisecond)
 
-	// Use up the rate limit
 	allowed, err := limiter.Allow(context.Background(), "sms")
 	require.NoError(t, err)
 	require.True(t, allowed)
 
 	h := &Handler{
 		DB:             db,
-		DeliveryClient: delivery.NewClient(server.URL),
+		DeliveryClient: mock,
 		Logger:         setupTestLogger(),
 		Limiter:        limiter,
 	}
 
 	task := createTestTask(t, notificationID, "sms", "normal")
-	// Handler waits for rate limit to clear, then succeeds
 	err = h.HandleNotification(context.Background(), task)
 	require.NoError(t, err)
 
@@ -317,6 +314,13 @@ func TestHandleNotification_RateLimited_WaitsAndProceeds(t *testing.T) {
 }
 
 func TestHandleNotification_RateLimited_RespectsContextCancel(t *testing.T) {
+	mock := &mockSender{
+		SendFunc: func(ctx context.Context, req delivery.SendRequest) (*delivery.SendResponse, error) {
+			t.Fatal("delivery should not have been called when rate limited and context cancelled")
+			return nil, nil
+		},
+	}
+
 	db := setupTestDB(t)
 	notificationID := uuid.New()
 	notification := models.Notification{
@@ -333,14 +337,13 @@ func TestHandleNotification_RateLimited_RespectsContextCancel(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	limiter := ratelimit.New(rdb, 1, 10*time.Second)
 
-	// Use up the rate limit (long window, won't clear naturally)
 	allowed, err := limiter.Allow(context.Background(), "sms")
 	require.NoError(t, err)
 	require.True(t, allowed)
 
 	h := &Handler{
 		DB:             db,
-		DeliveryClient: delivery.NewClient("http://localhost:0"),
+		DeliveryClient: mock,
 		Logger:         setupTestLogger(),
 		Limiter:        limiter,
 	}
@@ -352,7 +355,6 @@ func TestHandleNotification_RateLimited_RespectsContextCancel(t *testing.T) {
 	err = h.HandleNotification(ctx, task)
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 
-	// Notification should still be pending
 	var updated models.Notification
 	require.NoError(t, db.First(&updated, "id = ?", notificationID).Error)
 	assert.Equal(t, models.StatusPending, updated.Status)
