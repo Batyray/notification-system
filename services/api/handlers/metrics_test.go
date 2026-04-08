@@ -6,9 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/batyray/notification-system/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/batyray/notification-system/pkg/models"
 )
 
 func TestGetMetrics_Success(t *testing.T) {

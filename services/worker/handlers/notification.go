@@ -9,15 +9,15 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/batyray/notification-system/pkg/models"
+	"github.com/batyray/notification-system/pkg/tasks"
+	"github.com/batyray/notification-system/services/worker/delivery"
 	"github.com/hibiken/asynq"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-	"github.com/batyray/notification-system/pkg/models"
-	"github.com/batyray/notification-system/pkg/tasks"
-	"github.com/batyray/notification-system/services/worker/delivery"
 )
 
 func (h *Handler) HandleNotification(ctx context.Context, task *asynq.Task) error {

@@ -91,19 +91,13 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Start services
-        run: docker compose up -d postgres redis migrate
-        env:
-          POSTGRES_DB: notifications
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-
-      - name: Wait for services
+      - name: Start services and run migrations
         run: |
+          docker compose up -d postgres redis
           echo "Waiting for postgres..."
           until docker compose exec -T postgres pg_isready -U postgres; do sleep 1; done
-          echo "Waiting for migrations..."
-          docker compose wait migrate
+          echo "Running migrations..."
+          docker compose run --rm migrate
 
       - name: Run integration tests
         run: go test -tags=integration ./tests/integration/... -v -count=1

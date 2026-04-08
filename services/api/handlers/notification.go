@@ -9,14 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/batyray/notification-system/pkg/models"
+	"github.com/batyray/notification-system/pkg/tasks"
+	"github.com/batyray/notification-system/services/api/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
-	"github.com/batyray/notification-system/pkg/models"
-	"github.com/batyray/notification-system/pkg/tasks"
-	"github.com/batyray/notification-system/services/api/middleware"
 )
 
 // CreateNotificationRequest represents the JSON body for creating a notification.

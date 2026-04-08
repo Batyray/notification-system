@@ -6,8 +6,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/hibiken/asynq"
-	"github.com/redis/go-redis/v9"
 	"github.com/batyray/notification-system/pkg/config"
 	"github.com/batyray/notification-system/pkg/logger"
 	"github.com/batyray/notification-system/pkg/models"
@@ -16,6 +14,8 @@ import (
 	"github.com/batyray/notification-system/services/worker/delivery"
 	"github.com/batyray/notification-system/services/worker/handlers"
 	"github.com/batyray/notification-system/services/worker/ratelimit"
+	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
 	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"

@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"github.com/batyray/notification-system/pkg/models"
 	"github.com/batyray/notification-system/pkg/tasks"
 	"github.com/batyray/notification-system/services/api/middleware"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
 )
 
 type BatchCreateRequest struct {

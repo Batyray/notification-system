@@ -9,6 +9,11 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/batyray/notification-system/pkg/logger"
+	"github.com/batyray/notification-system/pkg/models"
+	"github.com/batyray/notification-system/pkg/tasks"
+	"github.com/batyray/notification-system/services/worker/delivery"
+	"github.com/batyray/notification-system/services/worker/ratelimit"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
@@ -17,11 +22,6 @@ import (
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
-	"github.com/batyray/notification-system/pkg/logger"
-	"github.com/batyray/notification-system/pkg/models"
-	"github.com/batyray/notification-system/pkg/tasks"
-	"github.com/batyray/notification-system/services/worker/delivery"
-	"github.com/batyray/notification-system/services/worker/ratelimit"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )

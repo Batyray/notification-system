@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/batyray/notification-system/pkg/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/batyray/notification-system/pkg/logger"
 )
 
 func TestLogging_LogsRequestAndResponse(t *testing.T) {
